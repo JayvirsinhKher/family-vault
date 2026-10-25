@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Family Document Vault</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <style>
+    :root {
+      --primary-color: #0d6efd;
+      --bg-color: #f1f5f9;
+    }
+    body {
+      background-color: var(--bg-color);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .vault-container { max-width: 900px; }
+    .card-doc {
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+      background: #ffffff;
+    }
+    .card-doc:hover {
+      box-shadow: 0 4px 14px rgba(0,0,0,0.06);
+    }
+    .person-header {
+      border-left: 4px solid var(--primary-color);
+      padding-left: 10px;
+      margin-top: 1.5rem;
+      margin-bottom: 0.85rem;
+    }
+    /* Mobile-optimized action buttons */
+    .btn-action {
+      padding: 0.35rem 0.65rem;
+      font-size: 0.82rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      border-radius: 6px;
+    }
+    #viewerModal .modal-body {
+      height: 70vh;
+      overflow: hidden;
+    }
+    #viewerFrame, #viewerImage {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    /* Hidden print frame */
+    #printFrame {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Hidden Iframe for Direct Printing -->
+  <iframe id="printFrame"></iframe>
+
+  <!-- Inactivity Auto-Lock Toast -->
+  <div class="position-fixed top-0 start-50 translate-middle-x p-3" style="z-index: 1090;">
+    <div id="timeoutAlert" class="toast align-items-center text-bg-warning border-0" role="alert">
+      <div class="d-flex">
+        <div class="toast-body"><i class="bi bi-clock-history me-1"></i> Locked due to 5 minutes of inactivity.</div>
+        <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast"></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Authentication Screen -->
+  <div id="authContainer" class="container vault-container" style="margin-top: 15vh;">
+    <div class="card shadow-sm border-0 p-4 mx-auto" style="max-width: 400px; border-radius: 16px;">
+      <div class="text-center mb-3">
+        <i class="bi bi-shield-lock-fill text-primary" style="font-size: 3rem;"></i>
+        <h4 class="mt-2 fw-bold">Family Vault</h4>
+        <p class="text-muted small">Enter master password or personal password</p>
+      </div>
+      <div id="authAlert" class="alert alert-danger py-2 d-none"></div>
+      <form id="authForm">
+        <div class="mb-3">
+          <input type="password" id="vaultPassword" class="form-control form-control-lg text-center" placeholder="Password" required autofocus>
+        </div>
+        <button type="submit" id="unlockBtn" class="btn btn-primary btn-lg w-100">
+          <span id="unlockSpinner" class="spinner-border spinner-border-sm d-none"></span> Unlock Vault
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Vault Dashboard -->
+  <div id="vaultDashboard" class="container vault-container py-3 d-none">
+    <header class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center pb-3 mb-3 border-bottom gap-2">
+      <div>
+        <div class="d-flex align-items-center gap-2">
+          <i class="bi bi-folder-fill text-primary fs-4"></i>
+          <h4 class="mb-0 fw-bold">Family Vault</h4>
+        </div>
+        <small class="text-muted" id="userBadge"></small>
+      </div>
+      <div class="d-flex gap-2 align-items-center">
+        <input type="text" id="searchInput" class="form-control form-control-sm" placeholder="Search doc..." style="max-width: 200px;">
+        <button id="logoutBtn" class="btn btn-outline-secondary btn-sm"><i class="bi bi-box-arrow-right"></i> Lock</button>
+      </div>
+    </header>
+
+    <!-- Documents List -->
+    <div id="documentsList"></div>
+  </div>
+
+  <!-- File Preview Modal -->
+  <div class="modal fade" id="viewerModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+      <div class="modal-content border-0">
+        <div class="modal-header py-2">
+          <h6 class="modal-title fw-bold text-truncate" id="viewerTitle">Document Preview</h6>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body p-0 d-flex justify-content-center align-items-center bg-light">
+          <iframe id="viewerFrame" class="d-none border-0"></iframe>
+          <img id="viewerImage" class="d-none">
+          <div id="viewerSpinner" class="spinner-border text-primary"></div>
+        </div>
+        <div class="modal-footer py-2 d-flex flex-wrap justify-content-between">
+          <div class="d-flex gap-2">
+            <button id="modalShareBtn" class="btn btn-outline-success btn-sm"><i class="bi bi-share"></i> Share</button>
+            <button id="modalPrintBtn" class="btn btn-outline-secondary btn-sm"><i class="bi bi-printer"></i> Print</button>
+          </div>
+          <button id="modalDownloadBtn" class="btn btn-primary btn-sm"><i class="bi bi-download"></i> Download</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    // CONFIGURATION: Replace with your deployed Web App URL
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzEpipjT2iZ1RDyhA7SbpE4ws710-FmCGm_POiJ_sYGI9VhP7K1ceyEZNyuJ1nYMA/exec";
+    const INACTIVITY_LIMIT_MS = 5 * 60 * 1000; // 5 minutes
+
+    let cachedPassword = "";
+    let vaultStore = [];
+    let currentActiveFile = null;
+    let inactivityTimer = null;
+
+    const modal = new bootstrap.Modal(document.getElementById('viewerModal'));
+    const timeoutToast = new bootstrap.Toast(document.getElementById('timeoutAlert'));
+
+    // --- Inactivity Timer ---
+    function resetInactivityTimer() {
+      if (!cachedPassword) return;
+      clearTimeout(inactivityTimer);
+      inactivityTimer = setTimeout(() => lockVault(true), INACTIVITY_LIMIT_MS);
+    }
+
+    ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll'].forEach(evt => {
+      window.addEventListener(evt, resetInactivityTimer, { passive: true });
+    });
+
+    function lockVault(dueToTimeout = false) {
+      clearTimeout(inactivityTimer);
+      cachedPassword = "";
+      vaultStore = [];
+      currentActiveFile = null;
+
+      modal.hide();
+      document.getElementById('viewerFrame').src = "";
+      document.getElementById('viewerImage').src = "";
+      document.getElementById('vaultPassword').value = "";
+      document.getElementById('vaultDashboard').classList.add('d-none');
+      document.getElementById('authContainer').classList.remove('d-none');
+
+      if (dueToTimeout) {
+        timeoutToast.show();
+      }
+    }
+
+    // --- Authentication ---
+    document.getElementById('authForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const pwd = document.getElementById('vaultPassword').value;
+      const btn = document.getElementById('unlockBtn');
+      const spinner = document.getElementById('unlockSpinner');
+      const alertBox = document.getElementById('authAlert');
+
+      btn.disabled = true;
+      spinner.classList.remove('d-none');
+      alertBox.classList.add('d-none');
+
+      try {
+        const res = await fetch(APPS_SCRIPT_URL, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify({ action: "listDocuments", password: pwd })
+        });
+        const result = await res.json();
+
+        if (result.success) {
+          cachedPassword = pwd;
+          vaultStore = result.vault;
+
+          const badgeText = result.role === "ALL" 
+            ? `Signed in: <strong>${result.user}</strong> (All Folders)`
+            : `Signed in: <strong>${result.user}</strong>`;
+          document.getElementById('userBadge').innerHTML = badgeText;
+
+          document.getElementById('authContainer').classList.add('d-none');
+          document.getElementById('vaultDashboard').classList.remove('d-none');
+          renderVault(vaultStore);
+          resetInactivityTimer();
+        } else {
+          alertBox.textContent = result.error || "Incorrect password";
+          alertBox.classList.remove('d-none');
+        }
+      } catch (err) {
+        alertBox.textContent = "Unable to connect to vault backend.";
+        alertBox.classList.remove('d-none');
+      } finally {
+        btn.disabled = false;
+        spinner.classList.add('d-none');
+      }
+    });
+
+    // --- Render Documents ---
+    function renderVault(data, filter = "") {
+      const container = document.getElementById('documentsList');
+      container.innerHTML = "";
+      let matches = 0;
+
+      data.forEach(group => {
+        const filteredDocs = group.documents.filter(doc => 
+          doc.name.toLowerCase().includes(filter.toLowerCase()) || 
+          group.person.toLowerCase().includes(filter.toLowerCase())
+        );
+
+        if (filteredDocs.length > 0) {
+          matches++;
+          const section = document.createElement('div');
+          section.className = "mb-4";
+
+          const cardsHtml = filteredDocs.map(doc => {
+            const isPdf = doc.mimeType.includes("pdf");
+            const isImg = doc.mimeType.includes("image");
+            const icon = isPdf ? "bi-file-earmark-pdf text-danger" : (isImg ? "bi-file-earmark-image text-success" : "bi-file-earmark-text text-secondary");
+
+            return `
+              <div class="col-12 col-md-6 mb-3">
+                <div class="card card-doc p-3 h-100">
+                  <div class="d-flex align-items-center gap-3">
+                    <i class="bi ${icon} fs-2"></i>
+                    <div class="flex-grow-1 overflow-hidden">
+                      <h6 class="mb-0 text-truncate fw-semibold" title="${doc.name}">${doc.name}</h6>
+                      <small class="text-muted d-block mb-2">${doc.size} &bull; ${doc.updated}</small>
+                      
+                      <!-- Action Bar -->
+                      <div class="d-flex flex-wrap gap-1">
+                        <button class="btn btn-outline-primary btn-action" onclick="previewDoc('${doc.id}', '${doc.name}', '${doc.mimeType}', '${group.person}')">
+                          <i class="bi bi-eye"></i> View
+                        </button>
+                        <button class="btn btn-light border btn-action text-secondary" onclick="downloadDoc('${doc.id}', '${doc.name}')">
+                          <i class="bi bi-download"></i>
+                        </button>
+                        <button class="btn btn-light border btn-action text-secondary" onclick="directPrintDoc('${doc.id}')" title="Print">
+                          <i class="bi bi-printer"></i>
+                        </button>
+                        <div class="dropdown d-inline">
+                          <button class="btn btn-light border btn-action text-secondary dropdown-toggle" data-bs-toggle="dropdown">
+                            <i class="bi bi-share"></i>
+                          </button>
+                          <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                            <li><a class="dropdown-item" href="javascript:void(0)" onclick="shareNativeOrApp('${doc.id}', '${doc.name}', '${group.person}', 'whatsapp')"><i class="bi bi-whatsapp text-success me-2"></i> WhatsApp</a></li>
+                            <li><a class="dropdown-item" href="javascript:void(0)" onclick="shareNativeOrApp('${doc.id}', '${doc.name}', '${group.person}', 'email')"><i class="bi bi-envelope text-primary me-2"></i> Email</a></li>
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            `;
+          }).join('');
+
+          section.innerHTML = `
+            <div class="person-header">
+              <h5 class="fw-bold mb-0">${group.person}</h5>
+              <small class="text-muted">${filteredDocs.length} document(s)</small>
+            </div>
+            <div class="row g-2">${cardsHtml}</div>
+          `;
+          container.appendChild(section);
+        }
+      });
+
+      if (matches === 0) {
+        container.innerHTML = `<div class="text-center py-5 text-muted"><i class="bi bi-search fs-2 mb-2 d-block"></i>No matching documents found.</div>`;
+      }
+    }
+
+    document.getElementById('searchInput').addEventListener('input', (e) => {
+      renderVault(vaultStore, e.target.value);
+    });
+
+    document.getElementById('logoutBtn').addEventListener('click', () => lockVault(false));
+
+    // --- Backend Fetch Helper ---
+    async function fetchFile(fileId) {
+      resetInactivityTimer();
+      const res = await fetch(APPS_SCRIPT_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ action: "getFile", password: cachedPassword, fileId: fileId })
+      });
+      return await res.json();
+    }
+
+    // Helper: Convert Base64 to Blob & File object
+    function base64ToFile(base64, fileName, mimeType) {
+      const byteChars = atob(base64);
+      const byteNumbers = new Array(byteChars.length);
+      for (let i = 0; i < byteChars.length; i++) {
+        byteNumbers[i] = byteChars.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: mimeType });
+      return new File([blob], fileName, { type: mimeType });
+    }
+
+    // --- Preview Handler ---
+    async function previewDoc(fileId, name, mimeType, person) {
+      const frame = document.getElementById('viewerFrame');
+      const img = document.getElementById('viewerImage');
+      const spinner = document.getElementById('viewerSpinner');
+      document.getElementById('viewerTitle').textContent = `${name} (${person})`;
+
+      frame.classList.add('d-none');
+      img.classList.add('d-none');
+      spinner.classList.remove('d-none');
+      modal.show();
+
+      const result = await fetchFile(fileId);
+      spinner.classList.add('d-none');
+
+      if (result.success) {
+        const fileData = `data:${result.mimeType};base64,${result.base64}`;
+        currentActiveFile = {
+          fileId: fileId,
+          name: result.fileName,
+          dataUrl: fileData,
+          base64: result.base64,
+          mimeType: result.mimeType,
+          person: person
+        };
+
+        if (result.mimeType.includes('pdf')) {
+          frame.src = fileData;
+          frame.classList.remove('d-none');
+        } else if (result.mimeType.includes('image')) {
+          img.src = fileData;
+          img.classList.remove('d-none');
+        } else {
+          frame.src = fileData;
+          frame.classList.remove('d-none');
+        }
+      }
+    }
+
+    // --- Direct Print ---
+    async function directPrintDoc(fileId) {
+      const result = await fetchFile(fileId);
+      if (result.success) {
+        const fileData = `data:${result.mimeType};base64,${result.base64}`;
+        const printFrame = document.getElementById('printFrame');
+        printFrame.src = fileData;
+        printFrame.onload = function() {
+          try {
+            printFrame.contentWindow.focus();
+            printFrame.contentWindow.print();
+          } catch (e) {
+            // Fallback for browsers blocking iframe cross-origin print
+            const printWin = window.open(fileData);
+            if (printWin) {
+              printWin.focus();
+              printWin.print();
+            }
+          }
+        };
+      }
+    }
+
+    // --- Direct Download ---
+    async function downloadDoc(fileId, name) {
+      const result = await fetchFile(fileId);
+      if (result.success) {
+        triggerDownload(result.fileName, `data:${result.mimeType};base64,${result.base64}`);
+      }
+    }
+
+    function triggerDownload(fileName, dataUrl) {
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+
+    // --- Sharing Logic (WhatsApp & Email) ---
+    async function shareNativeOrApp(fileId, fileName, person, channel) {
+      const result = await fetchFile(fileId);
+      if (!result.success) return;
+
+      const fileObj = base64ToFile(result.base64, fileName, result.mimeType);
+
+      // Check if browser/mobile supports sharing files directly (Android / iOS)
+      if (navigator.canShare && navigator.canShare({ files: [fileObj] })) {
+        try {
+          await navigator.share({
+            files: [fileObj],
+            title: fileName,
+            text: `Document: ${fileName} for ${person}`
+          });
+          return;
+        } catch (err) {
+          // Fallback below if user canceled or system aborted
+        }
+      }
+
+      // Desktop & Web Fallbacks
+      if (channel === 'whatsapp') {
+        const msg = encodeURIComponent(`Hi, here is the document record for ${person}: *${fileName}*.`);
+        window.open(`https://api.whatsapp.com/send?text=${msg}`, '_blank');
+      } else if (channel === 'email') {
+        const subject = encodeURIComponent(`Document: ${fileName} - ${person}`);
+        const body = encodeURIComponent(`Attached/Referenced document for ${person}: ${fileName}.\n\nPlease find the file downloaded from our family vault.`);
+        window.location.href = `mailto:?subject=${subject}&body=${body}`;
+        // Automatically trigger download so user can attach it to the opened email draft
+        triggerDownload(result.fileName, `data:${result.mimeType};base64,${result.base64}`);
+      }
+    }
+
+    // Modal Action Bindings
+    document.getElementById('modalDownloadBtn').addEventListener('click', () => {
+      if (currentActiveFile) triggerDownload(currentActiveFile.name, currentActiveFile.dataUrl);
+    });
+
+    document.getElementById('modalPrintBtn').addEventListener('click', () => {
+      if (currentActiveFile) directPrintDoc(currentActiveFile.fileId);
+    });
+
+    document.getElementById('modalShareBtn').addEventListener('click', () => {
+      if (currentActiveFile) shareNativeOrApp(currentActiveFile.fileId, currentActiveFile.name, currentActiveFile.person, 'whatsapp');
+    });
+  </script>
+</body>
+</html>
